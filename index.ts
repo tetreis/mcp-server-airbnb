@@ -88,6 +88,14 @@ const AIRBNB_SEARCH_TOOL: Tool = {
         enum: ["entire_home", "private_room", "shared_room", "hotel_room"],
         description: "Filter by property type: 'entire_home' (entire homes/apartments), 'private_room' (private rooms in shared homes), 'shared_room' (shared/dorm-style rooms), 'hotel_room' (hotel rooms)"
       },
+      amenities: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: ["air_conditioning", "washer", "dryer", "wifi", "tv", "heating", "pool", "workspace"]
+        },
+        description: "Required amenities. Each value maps to an Airbnb amenity ID and is sent as &amenities[]=<id> on the search URL, so Airbnb filters at the source. Listings missing any of these are excluded from the response."
+      },
       ignoreRobotsText: {
         type: "boolean",
         description: "Ignore robots.txt rules for this request"
@@ -399,6 +407,21 @@ async function fetchWithUserAgent(url: string, timeout: number = 30000) {
 }
 
 // API handlers
+// Airbnb amenity IDs. These map friendly names to the integers Airbnb's search
+// URL accepts as `amenities[]=N`. To extend: open airbnb.com/s/anywhere/homes,
+// tick the desired amenity in the filters panel, and copy the new ID from the
+// URL. Only IDs verified against public sources or live URLs are listed here.
+const AMENITY_IDS: Record<string, number> = {
+  air_conditioning: 5,
+  washer: 33,
+  dryer: 34,
+  wifi: 4,
+  tv: 1,
+  heating: 30,
+  pool: 7,
+  workspace: 47,
+};
+
 async function handleAirbnbSearch(params: any) {
   const {
     location,
@@ -413,6 +436,7 @@ async function handleAirbnbSearch(params: any) {
     maxPrice,
     cursor,
     propertyType,
+    amenities,
     ignoreRobotsText = false,
   } = params;
 
@@ -466,6 +490,16 @@ async function handleAirbnbSearch(params: any) {
   // Add property type filter
   if (propertyType && PROPERTY_TYPE_IDS[propertyType]) {
     searchUrl.searchParams.append("l2_property_type_ids[]", PROPERTY_TYPE_IDS[propertyType]);
+  }
+
+  // Add amenity filters. Airbnb's search expects `amenities[]=<id>` per amenity.
+  if (Array.isArray(amenities)) {
+    for (const a of amenities) {
+      const id = AMENITY_IDS[a];
+      if (id !== undefined) {
+        searchUrl.searchParams.append("amenities[]", id.toString());
+      }
+    }
   }
 
   // Add cursor for pagination
